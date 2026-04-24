@@ -1,0 +1,44 @@
+{
+  "name": "sse-io",
+  "version": "0.1.0",
+  "description": "Lightweight SSE connection manager with namespaces, rooms, and horizontal scaling adapters",
+  "keywords": ["sse", "server-sent-events", "realtime", "pubsub", "rooms", "namespaces"],
+  "license": "MIT",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./adapters/redis": {
+      "import": "./dist/esm/adapters/redis.js",
+      "require": "./dist/cjs/adapters/redis.js",
+      "types": "./dist/types/adapters/redis.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs && npm run build:types",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc --noEmit --watch"
+  },
+  "peerDependencies": {
+    "ioredis": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ioredis": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ioredis": "^5.4.1",
+    "typescript": "^5.7.0"
+  }
+}
