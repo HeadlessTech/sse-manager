@@ -1,3 +1,33 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 *.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Tooling
+.claude/
+.github/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temp
+tmp/
+temp/
