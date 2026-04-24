@@ -1,8 +1,8 @@
 # sse-io
 
-SSE is a lightweight and reliable server-to-client real time communication protocol. However, there are no easy ways for communication across rooms, or specific updates.
+Server-Sent Events is a well-supported, reliable protocol for pushing data from server to client in real time. What it lacks is any server-side model for managing connections — there is no built-in concept of which clients should receive which updates, no grouping, no targeting.
 
-`sse-io` takes inspiration from the usefulness and API of [socket.io](https://socket.io) and gives a similar coding experience with SSE. Namespaces, rooms, middleware, typed events, and horizontal scaling via a Redis adapter — the socket.io model, built on SSE.
+`sse-io` brings that structure to SSE, modelled on the API and concepts of [socket.io](https://socket.io): namespaces to partition your event streams, rooms to group clients, middleware for auth, and a fluent emit API to target exactly who needs a given update. If you already know socket.io, the patterns here will feel immediately familiar.
 
 Scales horizontally with the built-in **Redis adapter**.
 
