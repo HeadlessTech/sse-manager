@@ -1,8 +1,8 @@
 # sse-io
 
-A lightweight Server-Sent Events (SSE) library for Node.js, inspired by [socket.io](https://socket.io). Manages clients, namespaces, and rooms so you can push updates to browsers without the overhead of WebSockets.
+SSE is a lightweight and reliable server-to-client real time communication protocol. However, there are no easy ways for communication across rooms, or specific updates.
 
-SSE is a native browser protocol — no client library needed. `sse-io` gives you the server-side infrastructure to organize connections the same way socket.io does: namespaces to separate concerns, rooms to group clients, and a fluent emit API to target exactly who needs an update.
+`sse-io` takes inspiration from the usefulness and API of [socket.io](https://socket.io) and gives a similar coding experience with SSE. Namespaces, rooms, middleware, typed events, and horizontal scaling via a Redis adapter — the socket.io model, built on SSE.
 
 Scales horizontally with the built-in **Redis adapter**.
 
@@ -10,7 +10,6 @@ Scales horizontally with the built-in **Redis adapter**.
 
 ## Contents
 
-- [Why sse-io](#why-sse-io)
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Core concepts](#core-concepts)
@@ -27,17 +26,6 @@ Scales horizontally with the built-in **Redis adapter**.
 - [Migrating from a hand-rolled SSE helper](#migrating-from-a-hand-rolled-sse-helper)
 
 ---
-
-## Why sse-io
-
-SSE is the right tool when you need reliable server-to-client push:
-
-- **Built into every browser** — no polyfills, no client library
-- **Auto-reconnect** — the browser retries dropped connections automatically
-- **Works over HTTP/1.1 and HTTP/2** — no upgrade handshake
-- **Proxies and load balancers understand it** — unlike WebSockets
-
-The gap is on the server side. Raw `res.write()` calls scattered across your codebase don't scale. `sse-io` fills that gap with the namespace/room model you already know from socket.io, without pulling in the WebSocket transport.
 
 ---
 
