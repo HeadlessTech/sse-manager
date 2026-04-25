@@ -8,6 +8,30 @@ Scales horizontally with the built-in **Redis adapter**.
 
 ---
 
+## What is SSE?
+
+Think of SSE as a one-way WebSocket. The client opens a connection and the server streams updates to it in real time — live order status, notifications, AI response tokens, deployment logs. The difference from WebSockets is that the client can't send messages back over the same connection; it just listens.
+
+**Real-world use cases**
+
+- Order or delivery tracking updating as the status changes
+- Notification feeds (new message, mention, alert)
+- AI chat interfaces streaming tokens as they're generated
+- Live dashboards (prices, metrics, activity feeds)
+- Build or job progress streamed to a UI
+
+**Why SSE over WebSockets for these cases**
+
+WebSockets are bidirectional — great for chat or multiplayer where the client also sends data in real time. For anything that's just "server tells client what happened", SSE is simpler: it's plain HTTP, auto-reconnects on drop, and needs no extra infrastructure.
+
+**Limitations to know**
+
+- Server → client only. Client actions still go through normal HTTP requests.
+- One persistent connection per tab. Under HTTP/1.1 this counts against the browser's per-origin connection limit (usually 6). HTTP/2 removes this constraint.
+- Not suitable for binary streaming — payloads are text (JSON works great).
+
+---
+
 ## Contents
 
 - [Install](#install)
