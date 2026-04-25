@@ -26,8 +26,6 @@ Scales horizontally with the built-in **Redis adapter**.
 
 ---
 
----
-
 ## Install
 
 ```bash
@@ -130,6 +128,27 @@ const sseServer = new SSEServer(options?);
 | `heartbeatInterval` | `number`  | `30000` | Interval in ms for keepalive pings. Set to `0` to disable.       |
 | `cors.origin`       | `string`  | —       | Value for `Access-Control-Allow-Origin` header on SSE responses. |
 | `cors.credentials`  | `boolean` | —       | Whether to send `Access-Control-Allow-Credentials`.              |
+
+**CORS example**
+
+Required when your frontend and backend are on different origins — `EventSource` is a browser request and follows CORS rules.
+
+```typescript
+const sseServer = new SSEServer({
+  cors: {
+    origin: "https://app.example.com",
+    credentials: true,
+  },
+});
+```
+
+For local development with different ports:
+
+```typescript
+const sseServer = new SSEServer({
+  cors: { origin: "http://localhost:3000" },
+});
+```
 
 **Methods**
 

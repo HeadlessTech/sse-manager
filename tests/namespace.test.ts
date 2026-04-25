@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { SSEServer } from "../src/server.js";
 import { mockReq, mockRes, parseChunks } from "./helpers.js";
 
@@ -77,6 +77,45 @@ describe("SSENamespace — connection", () => {
       mockRes() as never
     );
     expect(client.handshake.headers.authorization).toBe("Bearer token");
+  });
+});
+
+describe("SSENamespace — CORS", () => {
+  it("sets Access-Control-Allow-Origin when cors.origin is provided", () => {
+    const io = new SSEServer({ heartbeatInterval: 0, cors: { origin: "https://example.com" } });
+    const ns = io.of("/test");
+    const res = mockRes();
+
+    ns.connect(mockReq() as never, res as never);
+
+    expect(res.writeHead).toHaveBeenCalledWith(
+      200,
+      expect.objectContaining({ "Access-Control-Allow-Origin": "https://example.com" })
+    );
+  });
+
+  it("sets Access-Control-Allow-Credentials when cors.credentials is true", () => {
+    const io = new SSEServer({ heartbeatInterval: 0, cors: { origin: "https://example.com", credentials: true } });
+    const ns = io.of("/test");
+    const res = mockRes();
+
+    ns.connect(mockReq() as never, res as never);
+
+    expect(res.writeHead).toHaveBeenCalledWith(
+      200,
+      expect.objectContaining({ "Access-Control-Allow-Credentials": "true" })
+    );
+  });
+
+  it("does not set CORS headers when cors option is omitted", () => {
+    const { ns } = setup();
+    const res = mockRes();
+
+    ns.connect(mockReq() as never, res as never);
+
+    const headers = res.writeHead.mock.calls[0][1] as Record<string, string>;
+    expect(headers["Access-Control-Allow-Origin"]).toBeUndefined();
+    expect(headers["Access-Control-Allow-Credentials"]).toBeUndefined();
   });
 });
 
@@ -205,7 +244,7 @@ describe("SSENamespace — emit", () => {
     expect(e2).toBeUndefined();
   });
 
-  it("emit data is JSON-serialised and parseable", () => {
+  it("emit data is JSON-serialized and parseable", () => {
     const { ns } = setup();
     const res = mockRes();
     ns.connect(mockReq() as never, res as never);

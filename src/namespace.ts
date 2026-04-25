@@ -28,6 +28,7 @@ export class SSENamespace<Events extends EventMap = EventMap> {
   private _adapter!: Adapter;
   private _heartbeatInterval: number;
   private _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly _cors: SSEServerOptions["cors"];
 
   /** Internal emitter for namespace-level events like 'connection' */
   private readonly _events = new EventEmitter();
@@ -35,6 +36,7 @@ export class SSENamespace<Events extends EventMap = EventMap> {
   constructor(name: string, options: SSEServerOptions = {}) {
     this.name = name;
     this._heartbeatInterval = options.heartbeatInterval ?? 30_000;
+    this._cors = options.cors;
   }
 
   /** @internal called by SSEServer when adapter is assigned */
@@ -97,12 +99,15 @@ export class SSENamespace<Events extends EventMap = EventMap> {
     );
 
     // Write SSE response headers
-    res.writeHead(200, {
+    const sseHeaders: Record<string, string> = {
       "Content-Type": "text/event-stream",
       Connection: "keep-alive",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
-    });
+    };
+    if (this._cors?.origin) sseHeaders["Access-Control-Allow-Origin"] = this._cors.origin;
+    if (this._cors?.credentials) sseHeaders["Access-Control-Allow-Credentials"] = "true";
+    res.writeHead(200, sseHeaders);
 
     // Initial connection acknowledgement
     res.write(
