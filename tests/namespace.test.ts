@@ -227,6 +227,40 @@ describe("SSENamespace — emit", () => {
 
     expect(res.written.length).toBe(before);
   });
+
+  it("chaining to().to() accumulates rooms and delivers to both", () => {
+    const { ns } = setup();
+    const res1 = mockRes();
+    const res2 = mockRes();
+    const res3 = mockRes();
+    const c1 = ns.connect(mockReq() as never, res1 as never);
+    const c2 = ns.connect(mockReq() as never, res2 as never);
+    ns.connect(mockReq() as never, res3 as never);
+    c1.join("room-a");
+    c2.join("room-b");
+
+    ns.to("room-a").to("room-b").emit("notice", { x: 1 });
+
+    expect(parseChunks(res1.written).find((e) => e.event === "notice")).toBeDefined();
+    expect(parseChunks(res2.written).find((e) => e.event === "notice")).toBeDefined();
+    expect(parseChunks(res3.written).find((e) => e.event === "notice")).toBeUndefined();
+  });
+
+  it("to(room).except(room).emit() delivers to targeted room but skips excluded clients", () => {
+    const { ns } = setup();
+    const res1 = mockRes();
+    const res2 = mockRes();
+    const c1 = ns.connect(mockReq() as never, res1 as never);
+    const c2 = ns.connect(mockReq() as never, res2 as never);
+    c1.join("subscribers");
+    c2.join("subscribers");
+    c2.join("muted");
+
+    ns.to("subscribers").except("muted").emit("flash", { msg: "hi" });
+
+    expect(parseChunks(res1.written).find((e) => e.event === "flash")).toBeDefined();
+    expect(parseChunks(res2.written).find((e) => e.event === "flash")).toBeUndefined();
+  });
 });
 
 describe("SSENamespace — middleware", () => {
@@ -277,6 +311,20 @@ describe("SSENamespace — middleware", () => {
     ns.connect(mockReq() as never, mockRes() as never);
 
     expect(third).not.toHaveBeenCalled();
+  });
+
+  it("middleware that throws synchronously disconnects the client", () => {
+    const { ns } = setup();
+    const handler = vi.fn();
+    ns.use(() => { throw new Error("boom"); });
+    ns.on("connection", handler);
+
+    const res = mockRes();
+    ns.connect(mockReq() as never, res as never);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(res.end).toHaveBeenCalled();
+    expect(ns.clientCount).toBe(0);
   });
 });
 
@@ -336,6 +384,31 @@ describe("SSENamespace — disconnect", () => {
     client.emit("event", {});
 
     expect(res.written.length).toBe(before);
+  });
+
+  it("calling disconnect() twice fires the disconnect event only once", () => {
+    const { ns } = setup();
+    const client = ns.connect(mockReq() as never, mockRes() as never);
+    const handler = vi.fn();
+    client.on("disconnect", handler);
+
+    client.disconnect();
+    client.disconnect();
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("removes client from all rooms on disconnect", () => {
+    const { ns } = setup();
+    const req = mockReq();
+    const client = ns.connect(req as never, mockRes() as never);
+    client.join(["room-1", "room-2", "room-3"]);
+
+    req.simulateClose();
+
+    expect(ns.getRoom("room-1")).toBeUndefined();
+    expect(ns.getRoom("room-2")).toBeUndefined();
+    expect(ns.getRoom("room-3")).toBeUndefined();
   });
 });
 

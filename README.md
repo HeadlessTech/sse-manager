@@ -1,6 +1,6 @@
 # sse-io
 
-Server-Sent Events is a well-supported, reliable protocol for pushing data from server to client in real time. What it lacks is any server-side model for managing connections — there is no built-in concept of which clients should receive which updates, no grouping, no targeting.
+Server-Sent Events (SSE) is a well-supported, reliable protocol for pushing data from server to client in real time. What it lacks is any server-side model for managing connections — there is no built-in concept of which clients should receive which updates, no grouping, no targeting.
 
 `sse-io` brings that structure to SSE, modelled on the API and concepts of [socket.io](https://socket.io): namespaces to partition your event streams, rooms to group clients, middleware for auth, and a fluent emit API to target exactly who needs a given update. If you already know socket.io, the patterns here will feel immediately familiar.
 
@@ -23,7 +23,6 @@ Scales horizontally with the built-in **Redis adapter**.
 - [Horizontal scaling with Redis](#horizontal-scaling-with-redis)
 - [Wire format](#wire-format)
 - [Browser usage](#browser-usage)
-- [Migrating from a hand-rolled SSE helper](#migrating-from-a-hand-rolled-sse-helper)
 
 ---
 
@@ -46,31 +45,31 @@ npm install ioredis
 ## Quick start
 
 ```typescript
-import express from 'express';
-import { SSEServer } from 'sse-io';
+import express from "express";
+import { SSEServer } from "sse-io";
 
 const app = express();
-const io = new SSEServer();
+const sseServer = new SSEServer();
 
-const orders = io.of('/orders');
+const ordersNamespace = sseServer.of("/orders");
 
 // 1. Define your SSE route
-app.get('/stream/orders/:orderId', (req, res) => {
-  const client = orders.connect(req, res);
+app.get("/stream/orders/:orderId", (req, res) => {
+  const client = ordersNamespace.connect(req, res);
   client.join(req.params.orderId);
 });
 
 // 2. Push updates from anywhere in your app
-orders.to(orderId).emit('update_order', { orderId, status: 'ready' });
+ordersNamespace.to(orderId).emit("update_order", { orderId, status: "ready" });
 
 app.listen(3000);
 ```
 
 ```javascript
 // Browser — no library needed
-const es = new EventSource('/stream/orders/abc123');
+const es = new EventSource("/stream/orders/abc123");
 
-es.addEventListener('update_order', (e) => {
+es.addEventListener("update_order", (e) => {
   const data = JSON.parse(e.data);
   console.log(data); // { orderId: 'abc123', status: 'ready' }
 });
@@ -85,8 +84,8 @@ es.addEventListener('update_order', (e) => {
 A namespace is a logical channel, identified by a name (e.g. `'/orders'`, `'/notifications'`). Each namespace manages its own set of connected clients and rooms. You can have as many namespaces as you like — they share the same HTTP server but are completely isolated from each other.
 
 ```typescript
-const orders = io.of('/orders');
-const notifications = io.of('/notifications');
+const ordersNamespace = sseServer.of("/orders");
+const notificationsNamespace = sseServer.of("/notifications");
 ```
 
 ### Room
@@ -95,11 +94,11 @@ A room is a named group of clients within a namespace. Clients can be in multipl
 
 ```typescript
 // Server
-client.join('order-123');
-client.join(['order-123', 'store-5']); // join multiple at once
+client.join("order-123");
+client.join(["order-123", "store-5"]); // join multiple at once
 
 // Emit to everyone in the room
-orders.to('order-123').emit('update', data);
+ordersNamespace.to("order-123").emit("update", data);
 ```
 
 ### Client
@@ -121,32 +120,32 @@ Top-level class. Manages namespaces and the active adapter.
 ```typescript
 import { SSEServer } from 'sse-io';
 
-const io = new SSEServer(options?);
+const sseServer = new SSEServer(options?);
 ```
 
 **Options**
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `heartbeatInterval` | `number` | `30000` | Interval in ms for keepalive pings. Set to `0` to disable. |
-| `cors.origin` | `string` | — | Value for `Access-Control-Allow-Origin` header on SSE responses. |
-| `cors.credentials` | `boolean` | — | Whether to send `Access-Control-Allow-Credentials`. |
+| Option              | Type      | Default | Description                                                      |
+| ------------------- | --------- | ------- | ---------------------------------------------------------------- |
+| `heartbeatInterval` | `number`  | `30000` | Interval in ms for keepalive pings. Set to `0` to disable.       |
+| `cors.origin`       | `string`  | —       | Value for `Access-Control-Allow-Origin` header on SSE responses. |
+| `cors.credentials`  | `boolean` | —       | Whether to send `Access-Control-Allow-Credentials`.              |
 
 **Methods**
 
 ```typescript
 // Get or create a namespace. Subsequent calls with the same name return the same instance.
-io.of(name: string): SSENamespace
-io.of<Events>(name: string): SSENamespace<Events>  // typed variant
+sseServer.of(name: string): SSENamespace
+sseServer.of<Events>(name: string): SSENamespace<Events>  // typed variant
 
 // Set the adapter for all namespaces
-io.adapter(adapter: Adapter): this
+sseServer.adapter(adapter: Adapter): this
 
 // Shorthand emit on the default '/' namespace
-io.to(rooms: string | string[]): ChainableEmitter
+sseServer.to(rooms: string | string[]): ChainableEmitter
 
 // Gracefully close all namespaces and the adapter
-await io.close()
+await sseServer.close()
 ```
 
 ---
@@ -164,8 +163,8 @@ namespace.connect(req: IncomingMessage, res: ServerResponse): Client
 Call this inside your HTTP route handler. It writes SSE headers, sends a `connection` event with the assigned `clientId`, and returns the `Client` object. You then call `client.join(room)` to subscribe the client to updates.
 
 ```typescript
-app.get('/stream/orders/:orderId', (req, res) => {
-  const client = orders.connect(req, res);
+app.get("/stream/orders/:orderId", (req, res) => {
+  const client = ordersNamespace.connect(req, res);
   client.join(req.params.orderId);
 });
 ```
@@ -173,9 +172,9 @@ app.get('/stream/orders/:orderId', (req, res) => {
 **Connection handler**
 
 ```typescript
-namespace.on('connection', (client: Client) => {
-  console.log('connected', client.id);
-  client.on('disconnect', () => console.log('disconnected', client.id));
+namespace.on("connection", (client: Client) => {
+  console.log("connected", client.id);
+  client.on("disconnect", () => console.log("disconnected", client.id));
 });
 ```
 
@@ -183,19 +182,19 @@ namespace.on('connection', (client: Client) => {
 
 ```typescript
 // Target one room
-namespace.to('room-id').emit('event', data)
+namespace.to("room-id").emit("event", data);
 
 // Target multiple rooms (deduplicated — clients in both rooms only receive once)
-namespace.to(['room-a', 'room-b']).emit('event', data)
+namespace.to(["room-a", "room-b"]).emit("event", data);
 
 // Chain .to() calls
-namespace.to('room-a').to('room-b').emit('event', data)
+namespace.to("room-a").to("room-b").emit("event", data);
 
 // Broadcast to all clients in namespace
-namespace.emit('event', data)
+namespace.emit("event", data);
 
 // Broadcast to all except clients in specific rooms
-namespace.except('vip-room').emit('event', data)
+namespace.except("vip-room").emit("event", data);
 ```
 
 **Middleware**
@@ -209,16 +208,16 @@ See [Middleware](#middleware) for details.
 **Introspection**
 
 ```typescript
-namespace.clientCount              // number of connected clients
-namespace.getClients()             // ReadonlyMap<ClientId, Client>
-namespace.getRooms()               // ReadonlyMap<Room, ReadonlySet<ClientId>>
-namespace.getRoom('room-id')       // ReadonlySet<ClientId> | undefined
+namespace.clientCount; // number of connected clients
+namespace.getClients(); // ReadonlyMap<ClientId, Client>
+namespace.getRooms(); // ReadonlyMap<Room, ReadonlySet<ClientId>>
+namespace.getRoom("room-id"); // ReadonlySet<ClientId> | undefined
 ```
 
 **Lifecycle**
 
 ```typescript
-await namespace.close()  // disconnect all clients and stop heartbeat
+await namespace.close(); // disconnect all clients and stop heartbeat
 ```
 
 ---
@@ -230,10 +229,10 @@ Represents a single SSE connection.
 **Properties**
 
 ```typescript
-client.id            // unique client ID (20-char alphanumeric string)
-client.handshake     // { headers, query, url } — snapshot at connect time
-client.rooms         // Set<Room> — rooms currently joined
-client.disconnected  // boolean
+client.id; // unique client ID (20-char alphanumeric string)
+client.handshake; // { headers, query, url } — snapshot at connect time
+client.rooms; // Set<Room> — rooms currently joined
+client.disconnected; // boolean
 ```
 
 **Methods**
@@ -262,11 +261,11 @@ client.on('disconnect', () => { ... })
 The `handshake` object contains a snapshot of request metadata available at connect time:
 
 ```typescript
-app.get('/stream/orders/:orderId', (req, res) => {
-  const client = orders.connect(req, res);
+app.get("/stream/orders/:orderId", (req, res) => {
+  const client = ordersNamespace.connect(req, res);
 
   // Query params: /stream/orders/abc?userId=99
-  console.log(client.handshake.query.userId);  // '99'
+  console.log(client.handshake.query.userId); // '99'
 
   // Headers
   console.log(client.handshake.headers.authorization);
@@ -281,12 +280,12 @@ Returned by `namespace.to()` and `namespace.except()`. Accumulates room filters 
 
 ```typescript
 // All of these are equivalent
-namespace.to('room-a').to('room-b').emit('event', data)
-namespace.to(['room-a', 'room-b']).emit('event', data)
+namespace.to("room-a").to("room-b").emit("event", data);
+namespace.to(["room-a", "room-b"]).emit("event", data);
 
 // Exclude rooms
-namespace.except('room-x').emit('event', data)
-namespace.to('room-a').except('room-b').emit('event', data)
+namespace.except("room-x").emit("event", data);
+namespace.to("room-a").except("room-b").emit("event", data);
 ```
 
 `.emit()` is the terminal call — nothing is sent until you call it.
@@ -303,27 +302,31 @@ interface OrderEvents {
   cancel_order: { orderId: string; reason: string };
 }
 
-const orders = io.of<OrderEvents>('/orders');
+const ordersNamespace = sseServer.of<OrderEvents>("/orders");
 
 // TypeScript enforces event name and data shape
-orders.to('order-123').emit('update_order', {
-  orderId: '123',
-  status: 'ready',
+ordersNamespace.to("order-123").emit("update_order", {
+  orderId: "123",
+  status: "ready",
   updatedAt: new Date().toISOString(),
 });
 
 // Error: 'unknown_event' is not assignable to keyof OrderEvents
-orders.emit('unknown_event', {});
+ordersNamespace.emit("unknown_event", {});
 
 // Error: missing 'reason' field
-orders.to('order-123').emit('cancel_order', { orderId: '123' });
+ordersNamespace.to("order-123").emit("cancel_order", { orderId: "123" });
 ```
 
 The `Client` object is also typed:
 
 ```typescript
-orders.on('connection', (client: Client<OrderEvents>) => {
-  client.emit('update_order', { orderId: '...', status: '...', updatedAt: '...' });
+ordersNamespace.on("connection", (client: Client<OrderEvents>) => {
+  client.emit("update_order", {
+    orderId: "...",
+    status: "...",
+    updatedAt: "...",
+  });
 });
 ```
 
@@ -334,10 +337,10 @@ orders.on('connection', (client: Client<OrderEvents>) => {
 Middleware runs on each new connection, before the `connection` event fires. Use it for authentication, rate limiting, or attaching metadata.
 
 ```typescript
-orders.use((client, next) => {
-  const token = client.handshake.headers['authorization'];
+ordersNamespace.use((client, next) => {
+  const token = client.handshake.headers["authorization"];
   if (!isValidToken(token)) {
-    return next(new Error('Unauthorized'));
+    return next(new Error("Unauthorized"));
   }
   next();
 });
@@ -348,9 +351,9 @@ Calling `next(error)` closes the connection immediately — the `connection` eve
 Multiple middleware functions run in the order they were registered:
 
 ```typescript
-orders.use(authenticate);
-orders.use(rateLimit);
-orders.use(attachUserMetadata);
+ordersNamespace.use(authenticate);
+ordersNamespace.use(rateLimit);
+ordersNamespace.use(attachUserMetadata);
 ```
 
 ---
@@ -360,38 +363,38 @@ orders.use(attachUserMetadata);
 By default `sse-io` uses an in-memory adapter, which only works when all clients are connected to the same server process. For horizontal scaling, use the Redis adapter.
 
 ```typescript
-import { SSEServer } from 'sse-io';
-import { RedisAdapter } from 'sse-io/adapters/redis';
+import { SSEServer } from "sse-io";
+import { RedisAdapter } from "sse-io/adapters/redis";
 
-const io = new SSEServer();
-io.adapter(new RedisAdapter({ url: 'redis://localhost:6379' }));
+const sseServer = new SSEServer();
+sseServer.adapter(new RedisAdapter({ url: "redis://localhost:6379" }));
 
-const orders = io.of('/orders');
+const ordersNamespace = sseServer.of("/orders");
 ```
 
-Now when **Server A** emits `orders.to('order-123').emit('update_order', data)`, the payload is published to a Redis channel. Every server instance (A, B, C, …) subscribes to that channel and delivers the event to whichever clients are locally connected — no sticky sessions required.
+Now when **Server A** emits `ordersNamespace.to('order-123').emit('update_order', data)`, the payload is published to a Redis channel. Every server instance (A, B, C, …) subscribes to that channel and delivers the event to whichever clients are locally connected — no sticky sessions required.
 
 **Options**
 
 ```typescript
 new RedisAdapter({
-  url: 'redis://localhost:6379',    // ioredis connection URL
-})
+  url: "redis://localhost:6379", // ioredis connection URL
+});
 
 // Or pass your own ioredis clients (useful if you already manage connections)
 new RedisAdapter({
   pubClient: existingRedisClient,
   subClient: existingRedisClient.duplicate(),
-})
+});
 
 // Custom channel prefix (default: 'sse-io')
 new RedisAdapter({
-  url: 'redis://localhost:6379',
-  channelPrefix: 'myapp-sse',
-})
+  url: "redis://localhost:6379",
+  channelPrefix: "myapp-sse",
+});
 ```
 
-**Set the adapter before calling `io.of()`** — namespaces created after `io.adapter()` pick up the new adapter automatically, but namespaces created before are also updated.
+**Set the adapter before calling `sseServer.of()`** — namespaces created after `sseServer.adapter()` pick up the new adapter automatically, but namespaces created before are also updated.
 
 ---
 
@@ -407,6 +410,7 @@ data: {"orderId":"abc123","status":"ready","updatedAt":"2026-04-24T10:00:00Z"}
 ```
 
 Each message:
+
 - `id` — millisecond timestamp, used by the browser for `Last-Event-ID` on reconnect
 - `event` — the event name passed to `.emit()`
 - `data` — `JSON.stringify(data)`, split across multiple `data:` lines if it contains newlines
@@ -425,22 +429,22 @@ Keepalive heartbeats are sent as SSE comment lines and are invisible to applicat
 No library needed. Use the native `EventSource` API:
 
 ```javascript
-const es = new EventSource('/stream/orders/abc123');
+const es = new EventSource("/stream/orders/abc123");
 
 // Listen for named events
-es.addEventListener('update_order', (event) => {
+es.addEventListener("update_order", (event) => {
   const data = JSON.parse(event.data);
   console.log(data.status); // 'ready'
 });
 
-es.addEventListener('cancel_order', (event) => {
+es.addEventListener("cancel_order", (event) => {
   const data = JSON.parse(event.data);
   console.log(data.reason);
 });
 
 // Connection lifecycle
-es.onopen = () => console.log('connected');
-es.onerror = () => console.log('disconnected, browser will retry');
+es.onopen = () => console.log("connected");
+es.onerror = () => console.log("disconnected, browser will retry");
 ```
 
 The browser reconnects automatically when the connection drops, sending the `Last-Event-ID` header so the server knows where it left off.
@@ -450,68 +454,7 @@ The browser reconnects automatically when the connection drops, sending the `Las
 `EventSource` sends cookies automatically for same-origin requests. For cross-origin with credentials:
 
 ```javascript
-const es = new EventSource('/stream/orders/abc123', { withCredentials: true });
+const es = new EventSource("/stream/orders/abc123", { withCredentials: true });
 ```
 
 Pair with `cors.credentials: true` in `SSEServer` options and an explicit `cors.origin`.
-
----
-
-## Migrating from a hand-rolled SSE helper
-
-If you have something like this:
-
-```typescript
-// Before
-class SSENamespace {
-  subscribe(req, res) { ... }
-  join(client, room) { ... }
-  publish(data, room) { ... }
-}
-
-const ns = new SSENamespace('/orders/order');
-
-router.get('/orders/:orderId', async (req, res) => {
-  const client = ns.subscribe(req, res);
-  ns.join(client, req.params.orderId);
-});
-
-ns.publish('update_order', orderId);
-```
-
-The equivalent with `sse-io`:
-
-```typescript
-// After
-import { SSEServer } from 'sse-io';
-
-const io = new SSEServer();
-const orders = io.of('/orders');
-
-router.get('/orders/:orderId', async (req, res) => {
-  const client = orders.connect(req, res);
-  client.join(req.params.orderId);
-});
-
-orders.to(orderId).emit('update_order', { orderId });
-```
-
-Key differences:
-- `subscribe` → `connect`
-- `publish(data, room)` → `to(room).emit(event, data)` — events are now named
-- `join(client, room)` → `client.join(room)` — the client manages its own room membership
-- Data is always JSON — no raw string payloads
-
-The browser listener also becomes simpler because the event name arrives in the `event:` field:
-
-```javascript
-// Before (parsing a type wrapper)
-es.onmessage = (e) => {
-  // had to check if data === 'update_order' as a string
-};
-
-// After (native named event)
-es.addEventListener('update_order', (e) => {
-  const data = JSON.parse(e.data);
-});
-```
