@@ -7,7 +7,7 @@ type RedisAdapterOptions = {
   /** Alternatively, pass an existing ioredis client */
   pubClient?: RedisLike;
   subClient?: RedisLike;
-  /** Redis channel prefix. Default: "sse-io" */
+  /** Redis channel prefix. Default: "sse-manager" */
   channelPrefix?: string;
 };
 
@@ -27,7 +27,7 @@ interface RedisLike {
  *   npm install ioredis
  *
  * Usage:
- *   import { RedisAdapter } from 'sse-io/adapters/redis';
+ *   import { RedisAdapter } from 'sse-manager/adapters/redis';
  *   io.adapter(new RedisAdapter({ url: 'redis://localhost:6379' }));
  *
  * Each server subscribes to the shared channel. When any server broadcasts,
@@ -42,7 +42,7 @@ export class RedisAdapter extends Adapter {
 
   constructor(options: RedisAdapterOptions = {}) {
     super();
-    const prefix = options.channelPrefix ?? "sse-io";
+    const prefix = options.channelPrefix ?? "sse-manager";
     this.channel = prefix;
 
     if (options.pubClient && options.subClient) {
@@ -102,7 +102,7 @@ function requireIoRedis(): new (url: string) => unknown {
     return require("ioredis") as new (url: string) => unknown;
   } catch {
     throw new Error(
-      "sse-io RedisAdapter requires ioredis. Run: npm install ioredis"
+      "sse-manager RedisAdapter requires ioredis. Run: npm install ioredis"
     );
   }
 }

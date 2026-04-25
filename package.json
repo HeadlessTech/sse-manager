@@ -1,5 +1,5 @@
 {
-  "name": "sse-io",
+  "name": "sse-manager",
   "version": "0.1.0",
   "description": "Lightweight SSE connection manager with namespaces, rooms, and horizontal scaling adapters",
   "keywords": [
@@ -13,9 +13,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HeadlessTech/sse-io.git"
+    "url": "https://github.com/HeadlessTech/sse-manager.git"
   },
-  "homepage": "https://github.com/HeadlessTech/sse-io#readme",
+  "homepage": "https://github.com/HeadlessTech/sse-manager#readme",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/index.d.ts",

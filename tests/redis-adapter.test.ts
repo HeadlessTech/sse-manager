@@ -126,7 +126,7 @@ describe("RedisAdapter — unit", () => {
 
     expect(publishSpy).toHaveBeenCalledOnce();
     const [channel, raw] = publishSpy.mock.calls[0] as [string, string];
-    expect(channel).toBe("sse-io");
+    expect(channel).toBe("sse-manager");
     expect(JSON.parse(raw)).toEqual({
       namespaceName: "/products",
       rooms: ["product-123"],
@@ -160,7 +160,7 @@ describe("RedisAdapter — unit", () => {
     // subscribe() is fire-and-forget in init(); wait a tick for it to complete
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    await pub.publish("sse-io", JSON.stringify({
+    await pub.publish("sse-manager", JSON.stringify({
       namespaceName: "/products",
       rooms: ["product-123"],
       excludeRooms: [],
@@ -187,7 +187,7 @@ describe("RedisAdapter — unit", () => {
     adapter.init(handler);
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    await pub.publish("sse-io", "not-valid-json{{");
+    await pub.publish("sse-manager", "not-valid-json{{");
 
     expect(handler).not.toHaveBeenCalled();
     await adapter.close();
@@ -200,7 +200,7 @@ describe("RedisAdapter — unit", () => {
     adapter.init(handler);
 
     await adapter.close();
-    await pub.publish("sse-io", JSON.stringify({
+    await pub.publish("sse-manager", JSON.stringify({
       namespaceName: "/ns", rooms: [], excludeRooms: [], event: "e", data: null, id: "x",
     }));
 

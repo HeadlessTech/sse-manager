@@ -1,8 +1,8 @@
-# sse-io
+# sse-manager
 
 Server-Sent Events (SSE) is a well-supported, reliable protocol for pushing data from server to client in real time. What it lacks is any server-side model for managing connections — there is no built-in concept of which clients should receive which updates, no grouping, no targeting.
 
-`sse-io` brings that structure to SSE, modelled on the API and concepts of [socket.io](https://socket.io): namespaces to partition your event streams, rooms to group clients, middleware for auth, and a fluent emit API to target exactly who needs a given update. If you already know socket.io, the patterns here will feel immediately familiar.
+`sse-manager` brings that structure to SSE, modelled on the API and concepts of [socket.io](https://socket.io): namespaces to partition your event streams, rooms to group clients, middleware for auth, and a fluent emit API to target exactly who needs a given update. If you already know socket.io, the patterns here will feel immediately familiar.
 
 Scales horizontally with the built-in **Redis adapter**.
 
@@ -29,7 +29,7 @@ Scales horizontally with the built-in **Redis adapter**.
 ## Install
 
 ```bash
-npm install sse-io
+npm install sse-manager
 ```
 
 For horizontal scaling, also install the Redis peer dependency:
@@ -44,7 +44,7 @@ npm install ioredis
 
 ```typescript
 import express from "express";
-import { SSEServer } from "sse-io";
+import { SSEServer } from "sse-manager";
 
 const app = express();
 const sseServer = new SSEServer();
@@ -116,7 +116,7 @@ Adapters handle the actual delivery of broadcast messages. The default `MemoryAd
 Top-level class. Manages namespaces and the active adapter.
 
 ```typescript
-import { SSEServer } from 'sse-io';
+import { SSEServer } from 'sse-manager';
 
 const sseServer = new SSEServer(options?);
 ```
@@ -379,11 +379,11 @@ ordersNamespace.use(attachUserMetadata);
 
 ## Horizontal scaling with Redis
 
-By default `sse-io` uses an in-memory adapter, which only works when all clients are connected to the same server process. For horizontal scaling, use the Redis adapter.
+By default `sse-manager` uses an in-memory adapter, which only works when all clients are connected to the same server process. For horizontal scaling, use the Redis adapter.
 
 ```typescript
-import { SSEServer } from "sse-io";
-import { RedisAdapter } from "sse-io/adapters/redis";
+import { SSEServer } from "sse-manager";
+import { RedisAdapter } from "sse-manager/adapters/redis";
 
 const sseServer = new SSEServer();
 sseServer.adapter(new RedisAdapter({ url: "redis://localhost:6379" }));
@@ -406,7 +406,7 @@ new RedisAdapter({
   subClient: existingRedisClient.duplicate(),
 });
 
-// Custom channel prefix (default: 'sse-io')
+// Custom channel prefix (default: 'sse-manager')
 new RedisAdapter({
   url: "redis://localhost:6379",
   channelPrefix: "myapp-sse",
@@ -419,7 +419,7 @@ new RedisAdapter({
 
 ## Wire format
 
-`sse-io` uses the SSE spec's native `event:` field for named events. This means browsers can use `addEventListener` directly without any client-side unpacking:
+`sse-manager` uses the SSE spec's native `event:` field for named events. This means browsers can use `addEventListener` directly without any client-side unpacking:
 
 ```
 id: 1745497200000
