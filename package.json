@@ -1,6 +1,6 @@
 {
   "name": "sse-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lightweight SSE connection manager with namespaces, rooms, and horizontal scaling adapters",
   "keywords": [
     "sse",
