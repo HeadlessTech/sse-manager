@@ -111,4 +111,51 @@ describe("SSEServer — convenience emit", () => {
     const events = res.written.join("");
     expect(events).toContain("event: hello");
   });
+
+  it("io.emit() broadcasts to all clients on the default '/' namespace", () => {
+    const io = new SSEServer({ heartbeatInterval: 0 });
+    const res1 = mockRes();
+    const res2 = mockRes();
+    io.of("/").connect(mockReq() as never, res1 as never);
+    io.of("/").connect(mockReq() as never, res2 as never);
+
+    io.emit("broadcast", { msg: "hello" });
+
+    expect(res1.written.join("")).toContain("event: broadcast");
+    expect(res2.written.join("")).toContain("event: broadcast");
+  });
+});
+
+describe("SSEServer — close sequencing", () => {
+  it("adapter is closed after all namespaces", async () => {
+    const io = new SSEServer({ heartbeatInterval: 0 });
+    const ns = io.of("/ns");
+    const order: string[] = [];
+
+    const origNsClose = ns.close.bind(ns);
+    vi.spyOn(ns, "close").mockImplementation(async () => {
+      await origNsClose();
+      order.push("namespace");
+    });
+
+    const newAdapter = new MemoryAdapter();
+    io.adapter(newAdapter);
+    vi.spyOn(newAdapter, "close").mockImplementation(async () => {
+      order.push("adapter");
+    });
+
+    await io.close();
+
+    expect(order).toEqual(["namespace", "adapter"]);
+  });
+
+  it("of() after close() returns a fresh namespace", async () => {
+    const io = new SSEServer({ heartbeatInterval: 0 });
+    const ns1 = io.of("/ns");
+
+    await io.close();
+
+    const ns2 = io.of("/ns");
+    expect(ns2).not.toBe(ns1);
+  });
 });

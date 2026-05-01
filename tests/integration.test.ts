@@ -1,86 +1,22 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { createServer, request, type Server } from "node:http";
+import { createServer, type Server } from "node:http";
 import { SSEServer } from "../src/server.js";
+import { createSSEClient } from "./helpers.js";
 import type { SSENamespace } from "../src/namespace.js";
 import type { EventMap } from "../src/types.js";
-
-// ── SSE client ────────────────────────────────────────────────────────────────
-
-interface SSEEvent {
-  id?: string;
-  event?: string;
-  data?: string;
-}
-
-interface SSEClient {
-  nextEvent: (eventName: string, timeout?: number) => Promise<SSEEvent>;
-  close: () => void;
-}
-
-function createSSEClient(url: string): SSEClient {
-  const buffered: SSEEvent[] = [];
-  const waiters = new Map<string, Array<(e: SSEEvent) => void>>();
-
-  const { hostname, port, pathname, search } = new URL(url);
-  const req = request(
-    { hostname, port, path: pathname + search, headers: { Accept: "text/event-stream" } },
-    (res) => {
-      let carry = "";
-      res.on("data", (chunk: Buffer) => {
-        carry += chunk.toString();
-        const messages = carry.split("\n\n");
-        carry = messages.pop() ?? "";
-        for (const msg of messages) {
-          if (!msg.trim() || msg.startsWith(":")) continue;
-          const evt: SSEEvent = {};
-          for (const line of msg.split("\n")) {
-            if (line.startsWith("id: ")) evt.id = line.slice(4);
-            else if (line.startsWith("event: ")) evt.event = line.slice(7);
-            else if (line.startsWith("data: ")) evt.data = line.slice(6);
-          }
-          if (!evt.event) continue;
-          const pending = waiters.get(evt.event);
-          if (pending?.length) {
-            pending.shift()!(evt);
-          } else {
-            buffered.push(evt);
-          }
-        }
-      });
-    }
-  );
-  req.end();
-
-  return {
-    nextEvent(eventName, timeout = 2000) {
-      const idx = buffered.findIndex((e) => e.event === eventName);
-      if (idx >= 0) return Promise.resolve(buffered.splice(idx, 1)[0]);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error(`Timeout waiting for "${eventName}"`)),
-          timeout
-        );
-        const list = waiters.get(eventName) ?? [];
-        list.push((e) => { clearTimeout(timer); resolve(e); });
-        waiters.set(eventName, list);
-      });
-    },
-    close() { req.destroy(); },
-  };
-}
 
 // ── test setup ────────────────────────────────────────────────────────────────
 
 interface Ctx {
   ns: SSENamespace<EventMap>;
-  connect: (productId: string) => SSEClient;
+  connect: (productId: string) => ReturnType<typeof createSSEClient>;
   close: () => Promise<void>;
 }
 
 async function setup(): Promise<Ctx> {
   const sseServer = new SSEServer({ heartbeatInterval: 0 });
   const ns = sseServer.of("/products");
-  const clients: SSEClient[] = [];
+  const clients: ReturnType<typeof createSSEClient>[] = [];
 
   const httpServer: Server = createServer((req, res) => {
     const match = req.url?.match(/^\/stream\/products\/([^?]+)/);

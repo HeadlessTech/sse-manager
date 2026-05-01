@@ -5,7 +5,7 @@ describe("MemoryAdapter", () => {
   it("calls the handler synchronously when broadcast is called", () => {
     const adapter = new MemoryAdapter();
     const handler = vi.fn();
-    adapter.init(handler);
+    adapter.init("/orders", handler);
 
     adapter.broadcast("/orders", ["room-1"], [], "update_order", { id: 1 }, "ts-1");
 
@@ -23,7 +23,7 @@ describe("MemoryAdapter", () => {
   it("passes empty rooms array for a namespace-wide broadcast", () => {
     const adapter = new MemoryAdapter();
     const handler = vi.fn();
-    adapter.init(handler);
+    adapter.init("/ns", handler);
 
     adapter.broadcast("/ns", [], [], "ping", null, "ts-2");
 
@@ -35,7 +35,7 @@ describe("MemoryAdapter", () => {
   it("passes excludeRooms correctly", () => {
     const adapter = new MemoryAdapter();
     const handler = vi.fn();
-    adapter.init(handler);
+    adapter.init("/ns", handler);
 
     adapter.broadcast("/ns", [], ["vip"], "notice", "hi", "ts-3");
 
@@ -52,10 +52,34 @@ describe("MemoryAdapter", () => {
     ).not.toThrow();
   });
 
+  it("routes broadcast only to the matching namespace handler", () => {
+    const adapter = new MemoryAdapter();
+    const handlerA = vi.fn();
+    const handlerB = vi.fn();
+    adapter.init("/ns-a", handlerA);
+    adapter.init("/ns-b", handlerB);
+
+    adapter.broadcast("/ns-a", [], [], "event", null, "id");
+
+    expect(handlerA).toHaveBeenCalledOnce();
+    expect(handlerB).not.toHaveBeenCalled();
+  });
+
+  it("broadcast to a namespace with no handler registered is a no-op", () => {
+    const adapter = new MemoryAdapter();
+    const handler = vi.fn();
+    adapter.init("/other", handler);
+
+    expect(() =>
+      adapter.broadcast("/unregistered", [], [], "event", null, "id")
+    ).not.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("stops calling handler after close", async () => {
     const adapter = new MemoryAdapter();
     const handler = vi.fn();
-    adapter.init(handler);
+    adapter.init("/ns", handler);
     await adapter.close();
 
     adapter.broadcast("/ns", [], [], "event", null, "id");

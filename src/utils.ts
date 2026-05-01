@@ -15,13 +15,14 @@ export function formatSSEMessage(msg: SSEMessage): string {
   const lines: string[] = [];
 
   if (msg.id !== undefined) {
-    lines.push(`id: ${msg.id}`);
+    lines.push(`id: ${msg.id.replace(/\r?\n/g, "")}`);
   }
 
-  lines.push(`event: ${msg.event}`);
+  lines.push(`event: ${msg.event.replace(/\r?\n/g, "")}`);
 
-  const raw =
+  const serialized =
     typeof msg.data === "string" ? msg.data : JSON.stringify(msg.data);
+  const raw = serialized ?? "";
 
   // Each line of data must be prefixed with "data: " per SSE spec
   for (const line of raw.split(/\r?\n/)) {

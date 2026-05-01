@@ -13,7 +13,7 @@ export abstract class Adapter {
    * The handler must be saved and invoked for every incoming payload
    * (including ones published by this same server instance).
    */
-  abstract init(handler: (payload: AdapterPayload) => void): void;
+  abstract init(namespaceName: string, handler: (payload: AdapterPayload) => void): void;
 
   /**
    * Called when the library wants to emit to a set of rooms.
@@ -27,7 +27,14 @@ export abstract class Adapter {
     event: string,
     data: unknown,
     id: string
-  ): void | Promise<void>;
+  ): Promise<void>;
+
+  /**
+   * Called before a namespace is re-assigned to a different adapter (e.g. via io.adapter()).
+   * Override to release per-namespace subscriptions without tearing down the whole adapter.
+   * The default implementation is a no-op.
+   */
+  uninit(_namespaceName: string): void | Promise<void> {}
 
   /** Called on graceful shutdown. Release connections, timers, etc. */
   abstract close(): Promise<void>;

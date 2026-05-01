@@ -47,19 +47,25 @@ export class SSEServer {
   }
 
   /**
-   * Convenience: emit on the default "/" namespace.
-   * Equivalent to io.of('/').to(rooms).emit(event, data).
+   * Convenience: target a room on the default "/" namespace.
+   * Equivalent to io.of('/').to(rooms).
    */
   to(rooms: string | string[]) {
     return this.of("/").to(rooms);
   }
 
-  /** Gracefully close all namespaces and the adapter */
+  /**
+   * Convenience: broadcast to all clients on the default "/" namespace.
+   * Equivalent to io.of('/').emit(event, data).
+   */
+  emit(event: string, data: unknown): void {
+    this.of("/").emit(event, data);
+  }
+
+  /** Gracefully close all namespaces then the adapter */
   async close(): Promise<void> {
-    await Promise.all([
-      ...[...this._namespaces.values()].map((ns) => ns.close()),
-      this._adapter.close(),
-    ]);
+    await Promise.all([...this._namespaces.values()].map((ns) => ns.close()));
+    await this._adapter.close();
     this._namespaces.clear();
   }
 }

@@ -16,6 +16,7 @@ export class ChainableEmitter<Events extends EventMap = EventMap> {
   private readonly _rooms: Set<Room>;
   private readonly _excludeRooms: Set<Room>;
 
+  /** @internal — obtain instances via SSENamespace.to() / .except() */
   constructor(
     broadcast: BroadcastFn,
     rooms: Set<Room>,
@@ -28,16 +29,16 @@ export class ChainableEmitter<Events extends EventMap = EventMap> {
 
   /** Add more rooms to target */
   to(rooms: Room | Room[]): ChainableEmitter<Events> {
-    const next = new Set(this._rooms);
-    for (const r of Array.isArray(rooms) ? rooms : [rooms]) next.add(r);
-    return new ChainableEmitter(this._broadcast, next, this._excludeRooms);
+    const nextRooms = new Set(this._rooms);
+    for (const r of Array.isArray(rooms) ? rooms : [rooms]) nextRooms.add(r);
+    return new ChainableEmitter(this._broadcast, nextRooms, new Set(this._excludeRooms));
   }
 
   /** Exclude rooms from the target set */
   except(rooms: Room | Room[]): ChainableEmitter<Events> {
-    const next = new Set(this._excludeRooms);
-    for (const r of Array.isArray(rooms) ? rooms : [rooms]) next.add(r);
-    return new ChainableEmitter(this._broadcast, this._rooms, next);
+    const nextExclude = new Set(this._excludeRooms);
+    for (const r of Array.isArray(rooms) ? rooms : [rooms]) nextExclude.add(r);
+    return new ChainableEmitter(this._broadcast, new Set(this._rooms), nextExclude);
   }
 
   /** Dispatch the event to the accumulated room set */

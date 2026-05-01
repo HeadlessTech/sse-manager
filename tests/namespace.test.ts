@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { SSEServer } from "../src/server.js";
+import { MemoryAdapter } from "../src/adapters/memory.js";
 import { mockReq, mockRes, parseChunks } from "./helpers.js";
 
 function setup() {
@@ -469,5 +470,114 @@ describe("SSENamespace — introspection", () => {
 
     expect(ns.getRooms().has("room-x")).toBe(true);
     expect(ns.getRooms().has("room-y")).toBe(true);
+  });
+});
+
+describe("SSENamespace — async middleware race condition", () => {
+  it("client disconnecting before async middleware completes is not leaked into _clients", () => {
+    const { ns } = setup();
+    const req = mockReq();
+    let resolveMiddleware!: () => void;
+    ns.use((_c, next) => {
+      resolveMiddleware = next; // hold — don't call next yet
+    });
+
+    ns.connect(req as never, mockRes() as never);
+    expect(ns.clientCount).toBe(0); // not registered yet
+
+    req.simulateClose(); // disconnect fires during middleware
+    resolveMiddleware(); // middleware resolves after disconnect
+
+    expect(ns.clientCount).toBe(0); // must not be leaked
+  });
+});
+
+describe("SSENamespace — heartbeat", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sends a ping comment at each heartbeat interval", async () => {
+    vi.useFakeTimers();
+    const io = new SSEServer({ heartbeatInterval: 1000 });
+    const ns = io.of("/hb");
+    const res = mockRes();
+    ns.connect(mockReq() as never, res as never);
+
+    vi.advanceTimersByTime(2000);
+
+    const pings = res.written.filter((c) => c === ": ping\n\n");
+    expect(pings).toHaveLength(2);
+
+    await ns.close();
+  });
+
+  it("no heartbeat is sent when heartbeatInterval is 0", () => {
+    vi.useFakeTimers();
+    const io = new SSEServer({ heartbeatInterval: 0 });
+    const ns = io.of("/hb");
+    const res = mockRes();
+    ns.connect(mockReq() as never, res as never);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(res.written.filter((c) => c === ": ping\n\n")).toHaveLength(0);
+  });
+
+  it("heartbeat stops after namespace close", async () => {
+    vi.useFakeTimers();
+    const io = new SSEServer({ heartbeatInterval: 1000 });
+    const ns = io.of("/hb");
+    const res = mockRes();
+    ns.connect(mockReq() as never, res as never);
+
+    await ns.close();
+    vi.advanceTimersByTime(5000);
+
+    expect(res.written.filter((c) => c === ": ping\n\n")).toHaveLength(0);
+  });
+});
+
+describe("SSENamespace — adapter swap", () => {
+  it("emits still reach connected clients after swapping adapter", () => {
+    const io = new SSEServer({ heartbeatInterval: 0 });
+    const ns = io.of("/swap");
+    const res = mockRes();
+    const client = ns.connect(mockReq() as never, res as never);
+    client.join("room-1");
+
+    io.adapter(new MemoryAdapter());
+
+    ns.to("room-1").emit("after-swap", { ok: true });
+
+    expect(parseChunks(res.written).find((e) => e.event === "after-swap")).toBeDefined();
+  });
+});
+
+describe("SSENamespace — emit after close", () => {
+  it("emitting on a closed namespace is a no-op and does not throw", async () => {
+    const io = new SSEServer({ heartbeatInterval: 0 });
+    const ns = io.of("/ns");
+    const res = mockRes();
+    ns.connect(mockReq() as never, res as never);
+    const before = res.written.length;
+
+    await io.close();
+
+    expect(() => ns.emit("event", {})).not.toThrow();
+    expect(res.written.length).toBe(before);
+  });
+});
+
+describe("SSENamespace — multiline data", () => {
+  it("multiline string data survives the SSE encode/parse round-trip", () => {
+    const { ns } = setup();
+    const res = mockRes();
+    ns.connect(mockReq() as never, res as never);
+
+    ns.emit("msg", "line1\nline2\nline3");
+
+    const event = parseChunks(res.written).find((e) => e.event === "msg");
+    expect(event?.data).toBe("line1\nline2\nline3");
   });
 });

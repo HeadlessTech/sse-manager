@@ -1,4 +1,4 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
 
 export type Room = string;
 export type ClientId = string;
@@ -36,13 +36,15 @@ export type AdapterPayload = {
 };
 
 /**
- * Framework-agnostic request/response types.
- * Express Request/Response satisfy this shape.
+ * Framework-agnostic request shape.
+ * Node's IncomingMessage and Express Request both satisfy this.
  */
-export type SSERequest = IncomingMessage & {
+export type SSERequest = {
   headers: Record<string, string | string[] | undefined>;
+  /** Pre-parsed query params supplied by the framework (e.g. Express). */
   query?: Record<string, string | string[] | undefined>;
   url?: string;
+  on(event: string, listener: () => void): void;
 };
 
 export type SSEResponse = ServerResponse & {
@@ -53,6 +55,3 @@ export type SSEResponse = ServerResponse & {
 
 /** Map of event names to their data shapes — used for typed namespaces */
 export type EventMap = Record<string, unknown>;
-
-/** Default untyped event map */
-export type DefaultEvents = Record<string, unknown>;

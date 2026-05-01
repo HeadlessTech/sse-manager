@@ -17,6 +17,10 @@ describe("makeId", () => {
     expect(id).toMatch(/^[A-Za-z0-9]+$/);
   });
 
+  it("returns an empty string for length 0", () => {
+    expect(makeId(0)).toBe("");
+  });
+
   it("produces unique values", () => {
     const ids = new Set(Array.from({ length: 100 }, () => makeId()));
     expect(ids.size).toBe(100);
@@ -58,6 +62,26 @@ describe("formatSSEMessage", () => {
   it("terminates the message with a double newline", () => {
     const out = formatSSEMessage({ event: "e", data: "x" });
     expect(out).toMatch(/\n\n$/);
+  });
+
+  it("does not throw when data is undefined, produces an empty data line", () => {
+    expect(() => formatSSEMessage({ event: "e", data: undefined })).not.toThrow();
+    const out = formatSSEMessage({ event: "e", data: undefined });
+    expect(out).toContain("data: ");
+  });
+
+  it("strips newlines from the event field so the SSE frame is not corrupted", () => {
+    const out = formatSSEMessage({ event: "foo\ndata: injected", data: "x" });
+    const lines = out.split("\n").filter(Boolean);
+    expect(lines.filter((l) => l.startsWith("event:"))).toHaveLength(1);
+    expect(lines.filter((l) => l.startsWith("data:"))).toHaveLength(1);
+  });
+
+  it("strips newlines from the id field", () => {
+    const out = formatSSEMessage({ event: "e", data: "x", id: "abc\ndef" });
+    const lines = out.split("\n").filter(Boolean);
+    expect(lines.filter((l) => l.startsWith("id:"))).toHaveLength(1);
+    expect(out).toContain("id: abcdef");
   });
 
   it("places id before event before data", () => {

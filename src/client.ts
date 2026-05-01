@@ -16,18 +16,16 @@ export class Client<Events extends EventMap = EventMap> {
   /** Rooms this client is currently joined to */
   readonly rooms: Set<Room> = new Set();
 
-  private readonly _req: SSERequest;
   private readonly _res: SSEResponse;
   private _disconnected = false;
   private readonly _events = new EventEmitter();
 
-  /** Injected by SSENamespace after construction */
-  private _joinFn!: (client: Client<Events>, rooms: Room[]) => void;
-  private _leaveFn!: (client: Client<Events>, rooms: Room[]) => void;
+  /** Injected by SSENamespace after construction; no-ops until _bind() is called */
+  private _joinFn: (client: Client<Events>, rooms: Room[]) => void = () => {};
+  private _leaveFn: (client: Client<Events>, rooms: Room[]) => void = () => {};
 
-  constructor(req: SSERequest, res: SSEResponse, handshake: HandshakeData) {
+  constructor(_req: SSERequest, res: SSEResponse, handshake: HandshakeData) {
     this.id = makeId(20);
-    this._req = req;
     this._res = res;
     this.handshake = handshake;
   }
@@ -58,7 +56,7 @@ export class Client<Events extends EventMap = EventMap> {
   emit(event: string, data: unknown): this;
   emit(event: string, data: unknown): this {
     if (this._disconnected) return this;
-    const id = String(Date.now());
+    const id = makeId();
     const msg = formatSSEMessage({ event, data, id });
     try {
       this._res.write(msg);
@@ -79,12 +77,12 @@ export class Client<Events extends EventMap = EventMap> {
   /** Close this client's SSE connection */
   disconnect(): void {
     if (this._disconnected) return;
-    this._handleClose();
     try {
       this._res.end();
     } catch {
       // already ended
     }
+    this._handleClose();
   }
 
   get disconnected(): boolean {

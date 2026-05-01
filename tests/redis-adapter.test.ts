@@ -1,76 +1,52 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-
-// ioredis-mock's channels and modifiedKeyEvents are global singletons shared
-// across all instances — raise their limits once so tests don't trigger warnings.
-{
-  const probe = new RedisMock();
-  const ctx = (probe as unknown as { context: { channels: { setMaxListeners(n: number): void }; modifiedKeyEvents: { setMaxListeners(n: number): void } } }).context;
-  ctx.channels.setMaxListeners(100);
-  ctx.modifiedKeyEvents.setMaxListeners(100);
-}
-import { createServer, request, type Server } from "node:http";
-import RedisMock from "ioredis-mock";
+import { createServer, type Server } from "node:http";
 import { RedisAdapter } from "../src/adapters/redis.js";
 import { SSEServer } from "../src/server.js";
+import { createSSEClient } from "./helpers.js";
 import type { SSENamespace } from "../src/namespace.js";
 import type { EventMap } from "../src/types.js";
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── in-memory Redis pub/sub mock ──────────────────────────────────────────────
+
+function makeRedisBus() {
+  const subs = new Map<string, Set<(msg: string) => void>>();
+
+  function createClient() {
+    const myHandlers = new Map<string, (msg: string) => void>();
+    return {
+      async connect() {},
+      async quit() {
+        for (const [ch, fn] of myHandlers) subs.get(ch)?.delete(fn);
+        myHandlers.clear();
+      },
+      async publish(channel: string, message: string) {
+        subs.get(channel)?.forEach((fn) => fn(message));
+      },
+      async subscribe(channel: string, listener: (msg: string, ch: string) => void) {
+        const wrapped = (msg: string) => listener(msg, channel);
+        if (!subs.has(channel)) subs.set(channel, new Set());
+        subs.get(channel)!.add(wrapped);
+        myHandlers.set(channel, wrapped);
+      },
+      async unsubscribe(channel: string) {
+        const fn = myHandlers.get(channel);
+        if (fn) {
+          subs.get(channel)?.delete(fn);
+          myHandlers.delete(channel);
+        }
+      },
+    };
+  }
+
+  return { createClient };
+}
 
 function makeMockClients() {
-  const shared = new RedisMock();
-  shared.setMaxListeners(50);
-  return { pub: shared.duplicate(), sub: shared.duplicate() };
+  const bus = makeRedisBus();
+  return { pub: bus.createClient(), sub: bus.createClient() };
 }
 
-interface SSEEvent { id?: string; event?: string; data?: string; }
-
-function createSSEClient(url: string) {
-  const buffered: SSEEvent[] = [];
-  const waiters = new Map<string, Array<(e: SSEEvent) => void>>();
-  const { hostname, port, pathname, search } = new URL(url);
-  const req = request(
-    { hostname, port, path: pathname + search, headers: { Accept: "text/event-stream" } },
-    (res) => {
-      let carry = "";
-      res.on("data", (chunk: Buffer) => {
-        carry += chunk.toString();
-        const messages = carry.split("\n\n");
-        carry = messages.pop() ?? "";
-        for (const msg of messages) {
-          if (!msg.trim() || msg.startsWith(":")) continue;
-          const evt: SSEEvent = {};
-          for (const line of msg.split("\n")) {
-            if (line.startsWith("id: ")) evt.id = line.slice(4);
-            else if (line.startsWith("event: ")) evt.event = line.slice(7);
-            else if (line.startsWith("data: ")) evt.data = line.slice(6);
-          }
-          if (!evt.event) continue;
-          const pending = waiters.get(evt.event);
-          if (pending?.length) pending.shift()!(evt);
-          else buffered.push(evt);
-        }
-      });
-    }
-  );
-  req.end();
-  return {
-    nextEvent(eventName: string, timeout = 2000): Promise<SSEEvent> {
-      const idx = buffered.findIndex((e) => e.event === eventName);
-      if (idx >= 0) return Promise.resolve(buffered.splice(idx, 1)[0]);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error(`Timeout waiting for "${eventName}"`)),
-          timeout
-        );
-        const list = waiters.get(eventName) ?? [];
-        list.push((e) => { clearTimeout(timer); resolve(e); });
-        waiters.set(eventName, list);
-      });
-    },
-    close() { req.destroy(); },
-  };
-}
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 interface ServerInstance {
   ns: SSENamespace<EventMap>;
@@ -126,7 +102,7 @@ describe("RedisAdapter — unit", () => {
 
     expect(publishSpy).toHaveBeenCalledOnce();
     const [channel, raw] = publishSpy.mock.calls[0] as [string, string];
-    expect(channel).toBe("sse-manager");
+    expect(channel).toBe("sse-manager::products");
     expect(JSON.parse(raw)).toEqual({
       namespaceName: "/products",
       rooms: ["product-123"],
@@ -147,7 +123,7 @@ describe("RedisAdapter — unit", () => {
     await adapter.broadcast("/ns", [], [], "evt", null, "id");
 
     const [channel] = publishSpy.mock.calls[0] as [string, string];
-    expect(channel).toBe("myapp");
+    expect(channel).toBe("myapp::ns");
 
     await adapter.close();
   });
@@ -156,11 +132,10 @@ describe("RedisAdapter — unit", () => {
     const { pub, sub } = makeMockClients();
     const adapter = new RedisAdapter({ pubClient: pub, subClient: sub });
     const handler = vi.fn();
-    adapter.init(handler);
-    // subscribe() is fire-and-forget in init(); wait a tick for it to complete
+    adapter.init("/products", handler);
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    await pub.publish("sse-manager", JSON.stringify({
+    await pub.publish("sse-manager::products", JSON.stringify({
       namespaceName: "/products",
       rooms: ["product-123"],
       excludeRooms: [],
@@ -184,10 +159,10 @@ describe("RedisAdapter — unit", () => {
     const { pub, sub } = makeMockClients();
     const adapter = new RedisAdapter({ pubClient: pub, subClient: sub });
     const handler = vi.fn();
-    adapter.init(handler);
+    adapter.init("/products", handler);
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    await pub.publish("sse-manager", "not-valid-json{{");
+    await pub.publish("sse-manager::products", "not-valid-json{{");
 
     expect(handler).not.toHaveBeenCalled();
     await adapter.close();
@@ -197,14 +172,63 @@ describe("RedisAdapter — unit", () => {
     const { pub, sub } = makeMockClients();
     const adapter = new RedisAdapter({ pubClient: pub, subClient: sub });
     const handler = vi.fn();
-    adapter.init(handler);
+    adapter.init("/ns", handler);
 
     await adapter.close();
-    await pub.publish("sse-manager", JSON.stringify({
+    await pub.publish("sse-manager::ns", JSON.stringify({
       namespaceName: "/ns", rooms: [], excludeRooms: [], event: "e", data: null, id: "x",
     }));
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("close() calls quit() on both pub and sub clients", async () => {
+    const { pub, sub } = makeMockClients();
+    const adapter = new RedisAdapter({ pubClient: pub, subClient: sub });
+    const pubQuit = vi.spyOn(pub, "quit");
+    const subQuit = vi.spyOn(sub, "quit");
+
+    await adapter.close();
+
+    expect(pubQuit).toHaveBeenCalledOnce();
+    expect(subQuit).toHaveBeenCalledOnce();
+  });
+
+  it("uninit() removes the handler and unsubscribes from the channel", async () => {
+    const { pub, sub } = makeMockClients();
+    const adapter = new RedisAdapter({ pubClient: pub, subClient: sub });
+    const unsubSpy = vi.spyOn(sub, "unsubscribe");
+    const handler = vi.fn();
+
+    adapter.init("/products", handler);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    adapter.uninit("/products");
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    await pub.publish("sse-manager::products", JSON.stringify({
+      namespaceName: "/products", rooms: [], excludeRooms: [], event: "e", data: null, id: "x",
+    }));
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(unsubSpy).toHaveBeenCalledWith("sse-manager::products");
+
+    await adapter.close();
+  });
+
+  it("calling init() twice for the same namespace subscribes only once", async () => {
+    const { pub, sub } = makeMockClients();
+    const adapter = new RedisAdapter({ pubClient: pub, subClient: sub });
+    const subscribeSpy = vi.spyOn(sub, "subscribe");
+    const handler = vi.fn();
+
+    adapter.init("/products", handler);
+    adapter.init("/products", handler);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(subscribeSpy).toHaveBeenCalledOnce();
+
+    await adapter.close();
   });
 });
 
@@ -219,17 +243,15 @@ describe("RedisAdapter — multi-server", () => {
   });
 
   function makeAdapterPair() {
-    // Both adapters share the same ioredis-mock bus — simulates two processes
-    // connected to the same Redis instance.
-    const shared = new RedisMock();
-    shared.setMaxListeners(50);
+    // Both adapters share the same bus — simulates two processes on the same Redis instance.
+    const bus = makeRedisBus();
     const adapterA = new RedisAdapter({
-      pubClient: shared.duplicate(),
-      subClient: shared.duplicate(),
+      pubClient: bus.createClient(),
+      subClient: bus.createClient(),
     });
     const adapterB = new RedisAdapter({
-      pubClient: shared.duplicate(),
-      subClient: shared.duplicate(),
+      pubClient: bus.createClient(),
+      subClient: bus.createClient(),
     });
     return { adapterA, adapterB };
   }

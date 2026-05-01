@@ -59,7 +59,7 @@ npm install sse-manager
 For horizontal scaling, also install the Redis peer dependency:
 
 ```bash
-npm install ioredis
+npm install redis
 ```
 
 ---
@@ -184,8 +184,9 @@ sseServer.of<Events>(name: string): SSENamespace<Events>  // typed variant
 // Set the adapter for all namespaces
 sseServer.adapter(adapter: Adapter): this
 
-// Shorthand emit on the default '/' namespace
+// Shorthands on the default '/' namespace
 sseServer.to(rooms: string | string[]): ChainableEmitter
+sseServer.emit(event: string, data: unknown): void
 
 // Gracefully close all namespaces and the adapter
 await sseServer.close()
@@ -200,7 +201,7 @@ Manages all clients and rooms within a namespace.
 **Registering a connection**
 
 ```typescript
-namespace.connect(req: IncomingMessage, res: ServerResponse): Client
+namespace.connect(req: SSERequest, res: SSEResponse): Client
 ```
 
 Call this inside your HTTP route handler. It writes SSE headers, sends a `connection` event with the assigned `clientId`, and returns the `Client` object. You then call `client.join(room)` to subscribe the client to updates.
@@ -421,14 +422,15 @@ Now when **Server A** emits `ordersNamespace.to('order-123').emit('update_order'
 
 ```typescript
 new RedisAdapter({
-  url: "redis://localhost:6379", // ioredis connection URL
+  url: "redis://localhost:6379", // node-redis connection URL
 });
 
-// Or pass your own ioredis clients (useful if you already manage connections)
-new RedisAdapter({
-  pubClient: existingRedisClient,
-  subClient: existingRedisClient.duplicate(),
-});
+// Or pass your own redis clients (useful if you already manage connections)
+import { createClient } from "redis";
+const pub = createClient({ url: "redis://localhost:6379" });
+const sub = pub.duplicate();
+await Promise.all([pub.connect(), sub.connect()]);
+new RedisAdapter({ pubClient: pub, subClient: sub });
 
 // Custom channel prefix (default: 'sse-manager')
 new RedisAdapter({
@@ -446,7 +448,7 @@ new RedisAdapter({
 `sse-manager` uses the SSE spec's native `event:` field for named events. This means browsers can use `addEventListener` directly without any client-side unpacking:
 
 ```
-id: 1745497200000
+id: k3x9mQr2pZ
 event: update_order
 data: {"orderId":"abc123","status":"ready","updatedAt":"2026-04-24T10:00:00Z"}
 
@@ -454,7 +456,7 @@ data: {"orderId":"abc123","status":"ready","updatedAt":"2026-04-24T10:00:00Z"}
 
 Each message:
 
-- `id` — millisecond timestamp, used by the browser for `Last-Event-ID` on reconnect
+- `id` — random alphanumeric string, forwarded by the browser as `Last-Event-ID` on reconnect
 - `event` — the event name passed to `.emit()`
 - `data` — `JSON.stringify(data)`, split across multiple `data:` lines if it contains newlines
 

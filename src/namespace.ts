@@ -13,7 +13,7 @@ import type {
   SSEServerOptions,
 } from "./types.js";
 
-type MiddlewareFn<Events extends EventMap> = (
+export type MiddlewareFn<Events extends EventMap> = (
   client: Client<Events>,
   next: (err?: Error) => void
 ) => void;
@@ -26,6 +26,7 @@ export class SSENamespace<Events extends EventMap = EventMap> {
   private readonly _rooms: Map<Room, Set<ClientId>> = new Map();
   private readonly _middlewares: MiddlewareFn<Events>[] = [];
   private _adapter!: Adapter;
+  private _adapterReady = false;
   private _heartbeatInterval: number;
   private _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private readonly _cors: SSEServerOptions["cors"];
@@ -42,8 +43,12 @@ export class SSENamespace<Events extends EventMap = EventMap> {
   /** @internal called by SSEServer when adapter is assigned */
   _setAdapter(adapter: Adapter): void {
     this._stopHeartbeat();
+    if (this._adapterReady) {
+      void this._adapter.uninit(this.name);
+    }
+    this._adapterReady = true;
     this._adapter = adapter;
-    adapter.init((payload) => this._onAdapterPayload(payload));
+    adapter.init(this.name, (payload) => this._onAdapterPayload(payload));
     if (this._heartbeatInterval > 0) {
       this._startHeartbeat();
     }
@@ -89,7 +94,7 @@ export class SSENamespace<Events extends EventMap = EventMap> {
     for (const [k, v] of Object.entries(req.headers)) {
       headers[k] = v;
     }
-    const query = parseQuery(req.url);
+    const query = req.query ?? parseQuery(req.url);
     const handshake = { headers, query, url: req.url ?? "" };
 
     const client = new Client<Events>(req, res, handshake);
@@ -124,8 +129,8 @@ export class SSENamespace<Events extends EventMap = EventMap> {
     });
 
     this._runMiddleware(client, (err?: Error) => {
-      if (err) {
-        client.disconnect();
+      if (err || client.disconnected) {
+        if (!client.disconnected) client.disconnect();
         return;
       }
       this._clients.set(client.id, client);
@@ -248,13 +253,7 @@ export class SSENamespace<Events extends EventMap = EventMap> {
 
   private _removeClient(client: Client<Events>): void {
     this._clients.delete(client.id);
-    for (const room of client.rooms) {
-      this._rooms.get(room)?.delete(client.id);
-      if (this._rooms.get(room)?.size === 0) {
-        this._rooms.delete(room);
-      }
-    }
-    client.rooms.clear();
+    this._leaveRooms(client, [...client.rooms]);
   }
 
   private _broadcast(
@@ -263,13 +262,11 @@ export class SSENamespace<Events extends EventMap = EventMap> {
     event: string,
     data: unknown
   ): void {
-    const id = String(Date.now());
+    const id = makeId();
     void this._adapter.broadcast(this.name, rooms, excludeRooms, event, data, id);
   }
 
   private _onAdapterPayload(payload: AdapterPayload): void {
-    if (payload.namespaceName !== this.name) return;
-
     const raw = formatSSEMessage({
       event: payload.event,
       data: payload.data,
@@ -310,6 +307,7 @@ export class SSENamespace<Events extends EventMap = EventMap> {
 
   private _startHeartbeat(): void {
     this._heartbeatTimer = setInterval(() => {
+      // SSE comment line — keeps the connection alive without dispatching a client event
       const ping = ": ping\n\n";
       for (const client of this._clients.values()) {
         client._write(ping);
