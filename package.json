@@ -1,6 +1,6 @@
 {
   "name": "sse-manager",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Lightweight SSE connection manager with namespaces, rooms, and horizontal scaling adapters",
   "keywords": [
     "sse",
@@ -29,6 +29,11 @@
       "import": "./dist/esm/adapters/redis.js",
       "require": "./dist/cjs/adapters/redis.js",
       "types": "./dist/types/adapters/redis.d.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "adapters/redis": ["./dist/types/adapters/redis.d.ts"]
     }
   },
   "files": [

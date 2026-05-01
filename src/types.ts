@@ -5,7 +5,7 @@ export type ClientId = string;
 
 export type HandshakeData = {
   headers: Record<string, string | string[] | undefined>;
-  query: Record<string, string | string[] | undefined>;
+  query: Record<string, unknown>;
   url: string;
 };
 
@@ -37,12 +37,13 @@ export type AdapterPayload = {
 
 /**
  * Framework-agnostic request shape.
- * Node's IncomingMessage and Express Request both satisfy this.
+ * Satisfied by Node's IncomingMessage, Express Request, and plain objects.
+ * For Fastify, pass request.raw (the underlying IncomingMessage).
  */
 export type SSERequest = {
   headers: Record<string, string | string[] | undefined>;
-  /** Pre-parsed query params supplied by the framework (e.g. Express). */
-  query?: Record<string, string | string[] | undefined>;
+  /** Pre-parsed query params supplied by the framework (e.g. Express req.query). */
+  query?: Record<string, unknown>;
   url?: string;
   on(event: string, listener: () => void): void;
 };

@@ -443,6 +443,58 @@ new RedisAdapter({
 
 ---
 
+## Framework compatibility
+
+`sse-manager` works with any Node.js HTTP framework. Pass the underlying Node.js request and response objects to `namespace.connect()`.
+
+**Express**
+
+Works directly — pass `req` and `res` as-is:
+
+```typescript
+app.get("/stream/orders/:orderId", (req, res) => {
+  const client = ordersNamespace.connect(req, res);
+  client.join(req.params.orderId);
+});
+```
+
+**Fastify**
+
+Fastify wraps the raw Node.js objects. Use `request.raw` and `reply.raw`:
+
+```typescript
+fastify.get("/stream/orders/:orderId", (request, reply) => {
+  const client = ordersNamespace.connect(request.raw, reply.raw);
+  client.join(request.params.orderId);
+});
+```
+
+**Koa**
+
+Koa exposes the raw objects on the context:
+
+```typescript
+router.get("/stream/orders/:orderId", (ctx) => {
+  const client = ordersNamespace.connect(ctx.req, ctx.res);
+  client.join(ctx.params.orderId);
+  ctx.respond = false; // prevent Koa from closing the response
+});
+```
+
+**Native `node:http`**
+
+```typescript
+import { createServer } from "node:http";
+
+createServer((req, res) => {
+  const client = ordersNamespace.connect(req, res);
+}).listen(3000);
+```
+
+Edge runtimes (Cloudflare Workers, Deno Deploy) are not supported — they use the Web `Request`/`Response` API rather than Node.js streams.
+
+---
+
 ## Wire format
 
 `sse-manager` uses the SSE spec's native `event:` field for named events. This means browsers can use `addEventListener` directly without any client-side unpacking:
